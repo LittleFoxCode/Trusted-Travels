@@ -5,11 +5,11 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import me.lukasabbe.trustedtravelfabric.TrustedTravelFabric;
 import me.lukasabbe.trustedtravelfabric.config.ServerObj;
-import net.minecraft.network.packet.s2c.common.ServerTransferS2CPacket;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.common.ClientboundTransferPacket;
+import net.minecraft.server.level.ServerPlayer;
 
 import java.util.List;
 import java.util.Optional;
@@ -17,31 +17,31 @@ import java.util.Optional;
 public class ServerCommand implements Command {
 
     @Override
-    public LiteralArgumentBuilder<ServerCommandSource> createCommand() {
-        return CommandManager.literal("server")
-                .then(CommandManager
+    public LiteralArgumentBuilder<CommandSourceStack> createCommand() {
+        return Commands.literal("server")
+                .then(Commands
                         .argument("servers", StringArgumentType.word())
                         .suggests(new ServerSuggestionProvider())
                         .executes(this::runCommand));
     }
 
     @Override
-    public int runCommand(CommandContext<ServerCommandSource> ctx) {
+    public int runCommand(CommandContext<CommandSourceStack> ctx) {
         List<ServerObj> servers = TrustedTravelFabric.serverConfig.servers;
         String server = StringArgumentType.getString(ctx,"servers");
         Optional<ServerObj> OptionalServerObj = servers.stream().filter(args -> args.name.equals(server)).findFirst();
         if(OptionalServerObj.isEmpty()){
-            ctx.getSource().sendError(Text.literal("There is no server with that name"));
+            ctx.getSource().sendFailure(Component.literal("There is no server with that name"));
             return 0;
         }
         ServerObj serverObj = OptionalServerObj.get();
-        ServerTransferS2CPacket transferPacket = new ServerTransferS2CPacket(serverObj.address, serverObj.port);
-        if(!ctx.getSource().isExecutedByPlayer()) {
-            ctx.getSource().sendError(Text.literal("Only players can execute this command"));
+        ClientboundTransferPacket transferPacket = new ClientboundTransferPacket(serverObj.address, serverObj.port);
+        if(!ctx.getSource().isPlayer()) {
+            ctx.getSource().sendFailure(Component.literal("Only players can execute this command"));
             return 0;
         }
-        ServerPlayerEntity player = ctx.getSource().getPlayer();
-        player.networkHandler.sendPacket(transferPacket);
+        ServerPlayer player = ctx.getSource().getPlayer();
+        player.connection.send(transferPacket);
         return 1;
     }
 }
